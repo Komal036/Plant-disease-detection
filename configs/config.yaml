@@ -1,0 +1,43 @@
+# configs/config.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Single source of truth for all hyperparameters and file paths.
+# NEVER hardcode these values in Python files.
+# ─────────────────────────────────────────────────────────────────────────────
+
+data:
+  raw_dir:      'data/raw/PlantVillage'   # path to your downloaded dataset
+  processed_dir: 'data/processed'
+  img_size:     224          # input image size (pixels), must match model
+  batch_size:   32
+  val_split:    0.15         # 15% of total data → validation
+  test_split:   0.10         # 10% of total data → hold-out test
+  seed:         42           # global random seed for reproducibility
+
+model:
+  architecture: 'EfficientNetV2S'   # base CNN backbone
+  dropout_rate: 0.30
+  dense_units:  256
+
+training:
+  # Phase 1 — train classification head only (base frozen)
+  epochs_head:    10
+  lr_head:        1.0e-3
+
+  # Phase 2 — fine-tune top layers of the base
+  epochs_finetune:  20
+  lr_finetune:      1.0e-5
+  unfreeze_layers:  40       # how many layers from the top to unfreeze
+
+  label_smoothing:  0.1      # prevents overconfident predictions
+  early_stopping_patience: 5
+  reduce_lr_patience:       3
+
+paths:
+  model_save_dir: 'models/saved'
+  log_dir:        'logs'
+  results_dir:    'results'
+  metadata_path:  'models/metadata.json'
+
+inference:
+  confidence_threshold: 0.60   # predictions below this are flagged uncertain
+  tflite_model_path:    'models/saved/model_fp16.tflite'
