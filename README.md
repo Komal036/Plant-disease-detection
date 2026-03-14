@@ -4,6 +4,9 @@
 [![TensorFlow 2.15](https://img.shields.io/badge/TensorFlow-2.15-orange.svg)](https://tensorflow.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://erjmtgw8ucpazavhkg95wf.streamlit.app)
+
+> 🚀 **[Live Demo → Try it now!](https://erjmtgw8ucpazavhkg95wf.streamlit.app)**
 
 An end-to-end deep learning system for detecting **plant diseases from leaf images**
 using EfficientNetV2S Transfer Learning, TensorFlow 2.x, and a Streamlit web interface.
@@ -56,18 +59,17 @@ The system predicts:
 
 ## 📊 Results
 
-| Metric            | Value   |
-|-------------------|---------|
-| Train Accuracy    | ~94.2%  |
-| Validation Accuracy | ~92.1% |
-| Macro F1 Score    | 0.918   |
-| Inference Time    | ~35 ms  |
-| Model Size (FP16) | ~25 MB  |
+| Metric              | Value   |
+|---------------------|---------|
+| Train Accuracy      | ~94.2%  |
+| Validation Accuracy | ~92.1%  |
+| Macro F1 Score      | 0.918   |
+| Inference Time      | ~35 ms  |
+| Model Size (FP16)   | ~25 MB  |
 
 ---
 
 ## 🚀 Installation
-
 ```bash
 # 1. Clone the repository
 git clone https://github.com/Komal036/Plant-disease-detection
@@ -75,7 +77,7 @@ cd Plant-disease-detection
 
 # 2. Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+source venv/bin/activate      # Windows: venv\Scripts\Activate.ps1
 
 # 3. Install dependencies
 pip install -r requirements.txt
@@ -120,7 +122,6 @@ pytest tests/ -v --tb=short
 ---
 
 ## 📁 Project Structure
-
 ```
 plant-disease-detection/
 ├── data/
@@ -156,7 +157,6 @@ plant-disease-detection/
 
 ## 🔮 Future Improvements
 
-- [ ] Deploy to Hugging Face Spaces
 - [ ] Add Grad-CAM visualisation for model explainability
 - [ ] Export to TFLite for Android/iOS app
 - [ ] Add disease treatment recommendations using RAG + LLM
@@ -167,7 +167,7 @@ plant-disease-detection/
 
 ## 👩‍💻 Author
 
-**Komal Kumari** · [GitHub](https://github.com/Komal036)
+**Komal Kumari** · [GitHub](https://github.com/Komal036) 
 
 ---
 
