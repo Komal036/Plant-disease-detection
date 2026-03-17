@@ -25,6 +25,7 @@ def evaluate_full(
         - classification_report.txt
         - confusion_matrix.png  (normalised)
         - f1_scores.png         (per-class bar chart)
+        - per_class_accuracy.png
 
     Returns a dict with accuracy, macro_f1, weighted_f1.
     """
@@ -90,7 +91,32 @@ def evaluate_full(
     plt.close(fig)
     logger.info('F1 score chart saved.')
 
-    # ── 4. Summary metrics ────────────────────────────────────────────────────
+    # ── 4. Per-class accuracy bar chart ──────────────────────────────────────
+    per_class_acc = []
+    for i in range(len(class_names)):
+        mask = (y_true == i)
+        if mask.sum() == 0:
+            per_class_acc.append(0.0)
+        else:
+            per_class_acc.append(float(np.mean(y_pred[mask] == i)))
+
+    fig, ax = plt.subplots(figsize=(14, 5))
+    acc_colors = ['#4CAF50' if a >= 0.9 else '#FF9800' if a >= 0.75 else '#F44336'
+                  for a in per_class_acc]
+    ax.bar(class_names, per_class_acc, color=acc_colors)
+    ax.axhline(0.90, color='red',    linestyle='--', linewidth=1.2, label='0.90 target')
+    ax.axhline(0.75, color='orange', linestyle='--', linewidth=1.0, label='0.75 baseline')
+    ax.set_ylim(0, 1.05)
+    ax.set_title('Per-Class Accuracy on Test Set', fontsize=13)
+    ax.set_ylabel('Accuracy')
+    ax.legend()
+    plt.xticks(rotation=45, ha='right', fontsize=9)
+    plt.tight_layout()
+    fig.savefig(output_dir / 'per_class_accuracy.png', dpi=150)
+    plt.close(fig)
+    logger.info('Per-class accuracy chart saved.')
+
+    # ── 5. Summary metrics ────────────────────────────────────────────────────
     metrics = {
         'accuracy':    float(np.mean(y_true == y_pred)),
         'macro_f1':    float(f1_score(y_true, y_pred, average='macro')),
@@ -104,12 +130,13 @@ def plot_training_history(history1, history2=None, output_dir: str = 'results/')
     """
     Plots accuracy and loss curves.
     Pass history2 when two-phase training was used.
+    Handles the case where history1 is None (Phase 1 was skipped on resume).
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     def combine(key):
-        vals = history1.history[key]
+        vals = history1.history[key] if history1 else []
         if history2:
             vals = vals + history2.history[key]
         return vals
@@ -120,12 +147,16 @@ def plot_training_history(history1, history2=None, output_dir: str = 'results/')
     val_loss= combine('val_loss')
     epochs  = range(1, len(acc) + 1)
 
+    if len(acc) == 0:
+        logger.warning('No training history to plot.')
+        return
+
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
     # Accuracy
     ax1.plot(epochs, acc,     'g-',  label='Train Accuracy')
     ax1.plot(epochs, val_acc, 'b--', label='Val Accuracy')
-    if history2:
+    if history1 and history2:
         split = len(history1.history['accuracy'])
         ax1.axvline(split, color='gray', linestyle=':', label='Fine-tune start')
     ax1.set_title('Model Accuracy')
@@ -137,7 +168,7 @@ def plot_training_history(history1, history2=None, output_dir: str = 'results/')
     # Loss
     ax2.plot(epochs, loss,     'r-',  label='Train Loss')
     ax2.plot(epochs, val_loss, 'b--', label='Val Loss')
-    if history2:
+    if history1 and history2:
         ax2.axvline(split, color='gray', linestyle=':', label='Fine-tune start')
     ax2.set_title('Model Loss')
     ax2.set_xlabel('Epoch')

@@ -1,15 +1,14 @@
 # 🌿 Plant Disease Detection
 
 [![Python 3.10](https://img.shields.io/badge/Python-3.10-blue.svg)](https://python.org)
-[![TensorFlow 2.15](https://img.shields.io/badge/TensorFlow-2.15-orange.svg)](https://tensorflow.org)
+[![TensorFlow 2.16](https://img.shields.io/badge/TensorFlow-2.16-orange.svg)](https://tensorflow.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://erjmtgw8ucpazavhkg95wf.streamlit.app)
 
 > 🚀 **[Live Demo → Try it now!](https://erjmtgw8ucpazavhkg95wf.streamlit.app)**
 
 An end-to-end deep learning system for detecting **plant diseases from leaf images**
-using EfficientNetV2S Transfer Learning, TensorFlow 2.x, and a Streamlit web interface.
+using EfficientNetV2S transfer learning, TensorFlow 2.x, and a Streamlit web interface.
 
 ---
 
@@ -17,12 +16,12 @@ using EfficientNetV2S Transfer Learning, TensorFlow 2.x, and a Streamlit web int
 
 Farmers lose 20–40% of global crop yield to plant diseases every year.
 This system enables real-time disease diagnosis from smartphone photos,
-achieving ~94% validation accuracy across 15 disease classes.
+predicting the plant disease class and providing treatment recommendations.
 
 The system predicts:
-- ✅ The **plant type**
-- ✅ The **disease** affecting the plant
+- ✅ The **plant type** and **disease** affecting the plant
 - ✅ A **confidence score** for the prediction
+- ✅ A **recommended treatment** for the detected disease
 
 ---
 
@@ -36,8 +35,8 @@ The system predicts:
 | Source        | https://www.kaggle.com/datasets/emmarex/plantdisease |
 
 **Supported disease classes:**
-- Pepper Bell Bacterial Spot / Healthy
-- Potato Early Blight / Late Blight / Healthy
+- Pepper Bell: Bacterial Spot, Healthy
+- Potato: Early Blight, Late Blight, Healthy
 - Tomato: Bacterial Spot, Early Blight, Late Blight, Leaf Mold,
   Septoria Leaf Spot, Spider Mites, Target Spot, Mosaic Virus,
   Yellow Leaf Curl Virus, Healthy
@@ -46,30 +45,20 @@ The system predicts:
 
 ## 🧠 Model Architecture
 
-| Component      | Detail                           |
-|----------------|----------------------------------|
-| Base Model     | EfficientNetV2S (ImageNet)       |
-| Input Size     | 224 × 224 × 3                    |
-| Head           | GAP → BN → Dropout → Dense(256) |
-| Output         | Softmax (15 classes)             |
-| Training       | 2-phase fine-tuning              |
-| Framework      | TensorFlow 2.15 / Keras          |
-
----
-
-## 📊 Results
-
-| Metric              | Value   |
-|---------------------|---------|
-| Train Accuracy      | ~94.2%  |
-| Validation Accuracy | ~92.1%  |
-| Macro F1 Score      | 0.918   |
-| Inference Time      | ~35 ms  |
-| Model Size (FP16)   | ~25 MB  |
+| Component      | Detail                                          |
+|----------------|-------------------------------------------------|
+| Base Model     | EfficientNetV2S (pretrained on ImageNet)        |
+| Input Size     | 224 × 224 × 3                                   |
+| Head           | GAP → BatchNorm → Dropout(0.3) → Dense(256)     |
+| Output         | Softmax (15 classes)                            |
+| Training       | 2-phase: head-only (10 epochs) → fine-tune (20) |
+| Framework      | TensorFlow 2.16 / Keras                         |
+| Preprocessing  | `efficientnet_v2.preprocess_input` (not /255)   |
 
 ---
 
 ## 🚀 Installation
+
 ```bash
 # 1. Clone the repository
 git clone https://github.com/Komal036/Plant-disease-detection
@@ -79,7 +68,7 @@ cd Plant-disease-detection
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\Activate.ps1
 
-# 3. Install dependencies
+# 3. Install dependencies (local CPU)
 pip install -r requirements.txt
 
 # 4. Set up environment variables
@@ -121,35 +110,55 @@ pytest tests/ -v --tb=short
 
 ---
 
+## ☁️ Training on Google Colab
+
+For GPU training, use the notebook in `notebooks/Plant_Disease_Training.ipynb`.
+
+**Quick setup:**
+1. Upload `kaggle.json` to your Google Drive
+2. Open the notebook in Colab (Runtime → Change runtime type → GPU T4)
+3. Run Cell 2 and paste the keep-alive JS into your browser console
+4. Run all cells from top to bottom
+
+**Resuming after a disconnect:**
+1. Re-run cells 1–6 (setup)
+2. In Cell 7, set `RESUME = True` and set `INITIAL_EPOCH_HEAD` /
+   `INITIAL_EPOCH_FINETUNE` to the last completed epochs
+3. Run from Cell 7 onwards — the best checkpoint is loaded automatically
+
+---
+
 ## 📁 Project Structure
+
 ```
 plant-disease-detection/
+├── app/
+│   └── streamlit_app.py       # Streamlit web interface
+├── configs/
+│   └── config.yaml            # All hyperparameters (single source of truth)
 ├── data/
 │   ├── raw/PlantVillage/      # Downloaded dataset (not in Git)
-│   └── processed/             # Pre-processed images
+│   └── processed/
+├── models/
+│   ├── saved/                 # Trained model weights (not in Git)
+│   └── metadata.json          # Class names + model config (in Git)
 ├── notebooks/
-│   ├── 01_EDA.ipynb
-│   ├── 02_training.ipynb
-│   └── 03_evaluation.ipynb
+│   └── Plant_Disease_Training.ipynb
+├── results/                   # Evaluation graphs and reports
 ├── src/
+│   ├── __init__.py
 │   ├── data_preprocessing.py
 │   ├── model_training.py
 │   ├── model_evaluation.py
 │   └── utils.py
-├── app/
-│   └── streamlit_app.py
-├── models/
-│   ├── saved/                 # Trained model (not in Git)
-│   └── metadata.json
 ├── tests/
 │   ├── test_preprocessing.py
 │   └── test_model.py
-├── configs/
-│   └── config.yaml
-├── results/                   # Graphs and reports
 ├── .env.example
-├── requirements.txt
+├── .gitignore
 ├── main.py
+├── requirements.txt           # Local / CPU
+├── requirements-colab.txt     # Colab / GPU (no tensorflow)
 └── README.md
 ```
 
@@ -157,9 +166,9 @@ plant-disease-detection/
 
 ## 🔮 Future Improvements
 
-- [ ] Add Grad-CAM visualisation for model explainability
-- [ ] Export to TFLite for Android/iOS app
-- [ ] Add disease treatment recommendations using RAG + LLM
+- [ ] Grad-CAM visualisation for model explainability
+- [ ] TFLite export for Android/iOS app
+- [ ] Disease treatment recommendations using RAG + LLM
 - [ ] Train on real-world (non-lab) field images
 - [ ] REST API with FastAPI + Docker
 
@@ -167,7 +176,7 @@ plant-disease-detection/
 
 ## 👩‍💻 Author
 
-**Komal Kumari** · [GitHub](https://github.com/Komal036) 
+**Komal Kumari** · [GitHub](https://github.com/Komal036)
 
 ---
 

@@ -12,12 +12,12 @@ import yaml
 
 def setup_logging(log_dir: str = 'logs', level: str = 'INFO') -> None:
     """
-    Sets up logging to both stdout and a rotating file.
+    Sets up logging to both stdout and a file.
     Call this once at the start of main.py.
     """
     Path(log_dir).mkdir(parents=True, exist_ok=True)
 
-    fmt = '%(asctime)s | %(name)-25s | %(levelname)-8s | %(message)s'
+    fmt     = '%(asctime)s | %(name)-25s | %(levelname)-8s | %(message)s'
     datefmt = '%Y-%m-%d %H:%M:%S'
 
     logging.basicConfig(
@@ -74,6 +74,11 @@ def save_metadata(
 
 def load_metadata(path: str = 'models/metadata.json') -> dict:
     """Loads the metadata JSON saved by save_metadata()."""
+    if not Path(path).exists():
+        raise FileNotFoundError(
+            f'Metadata not found: {path}\n'
+            f'Run training first to generate this file.'
+        )
     with open(path) as f:
         return json.load(f)
 
@@ -86,7 +91,7 @@ def get_env(key: str, default=None):
     the key is required (no default) and not set.
 
     Usage:
-        MODEL_DIR = get_env('MODEL_DIR', 'models/saved/final_model')
+        MODEL_DIR  = get_env('MODEL_DIR', 'models/saved/final_model')
         SECRET_KEY = get_env('SECRET_KEY')  # raises if missing
     """
     val = os.getenv(key, default)

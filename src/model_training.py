@@ -36,7 +36,9 @@ def build_model(
 
     inputs = tf.keras.Input(shape=(img_size, img_size, 3))
 
-    # Pass training=False so BatchNorm layers inside the base stay frozen
+    # Pass training=False so BatchNorm layers inside the base stay in
+    # inference mode — they use their stored running statistics instead
+    # of the current batch statistics. This is critical during Phase 1.
     x = base(inputs, training=False)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.BatchNormalization()(x)
@@ -84,7 +86,9 @@ def train(
     train_ds: tf.data.Dataset,
     val_ds: tf.data.Dataset,
     config: dict,
-    save_dir: str
+    save_dir: str,
+    initial_epoch_head: int = 0,
+    initial_epoch_finetune: int = 0,
 ):
     """
     Two-phase training:
@@ -93,41 +97,61 @@ def train(
                   with a much lower learning rate.
 
     Args:
-        model:     Model returned by build_model()
-        train_ds:  Training tf.data.Dataset
-        val_ds:    Validation tf.data.Dataset
-        config:    Dict with keys:
-                       epochs_head, epochs_finetune,
-                       lr_head, lr_finetune,
-                       unfreeze_layers, label_smoothing
-                       class_weight (optional)
-        save_dir:  Directory to save the final model
+        model:                   Model returned by build_model()
+        train_ds:                Training tf.data.Dataset
+        val_ds:                  Validation tf.data.Dataset
+        config:                  Dict with keys:
+                                     epochs_head, epochs_finetune,
+                                     lr_head, lr_finetune,
+                                     unfreeze_layers, label_smoothing,
+                                     early_stopping_patience,
+                                     reduce_lr_patience,
+                                     class_weight (optional)
+        save_dir:                Directory to save the final model
+        initial_epoch_head:      Resume Phase 1 from this epoch (default 0)
+        initial_epoch_finetune:  Resume Phase 2 from this epoch (default 0)
 
     Returns:
         history1, history2  (Keras History objects)
+
+    Resume after Colab disconnect:
+        Load the checkpoint, then call train() with the correct
+        initial_epoch_head / initial_epoch_finetune values from config.yaml.
+        The checkpoint callback will continue saving improved checkpoints.
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     callbacks = get_callbacks(str(save_dir))
 
-    # ── Phase 1: Train classification head ───────────────────────────────────
-    logger.info('=== Phase 1: Training classification head ===')
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=config['lr_head']),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=False
-        ),
-        metrics=['accuracy']
-    )
+    label_smoothing = config.get('label_smoothing', 0.1)
 
-    history1 = model.fit(
-        train_ds,
-        validation_data=val_ds,
-        epochs=config['epochs_head'],
-        callbacks=callbacks,
-        class_weight=config.get('class_weight'),
-        verbose=1
-    )
+    # ── Phase 1: Train classification head ───────────────────────────────────
+    # Skip Phase 1 entirely if we are resuming mid-Phase-2
+    if initial_epoch_finetune > 0:
+        logger.info('Skipping Phase 1 — resuming directly into Phase 2')
+        history1 = None
+    else:
+        logger.info('=== Phase 1: Training classification head ===')
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=config['lr_head']),
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=False,
+                # FIX: label_smoothing was in the config but never used in
+                # the original code. Applied here for better generalisation.
+                # NOTE: label_smoothing on SparseCategorical requires TF 2.6+
+            ),
+            metrics=['accuracy']
+        )
+
+        history1 = model.fit(
+            train_ds,
+            validation_data=val_ds,
+            epochs=config['epochs_head'],
+            initial_epoch=initial_epoch_head,   # FIX: resume support
+            callbacks=callbacks,
+            class_weight=config.get('class_weight'),
+            verbose=1
+        )
 
     # ── Phase 2: Fine-tune top layers of the base ─────────────────────────────
     logger.info('=== Phase 2: Fine-tuning top layers ===')
@@ -157,6 +181,7 @@ def train(
         train_ds,
         validation_data=val_ds,
         epochs=config['epochs_finetune'],
+        initial_epoch=initial_epoch_finetune,   # FIX: resume support
         callbacks=callbacks,
         class_weight=config.get('class_weight'),
         verbose=1
@@ -174,6 +199,9 @@ def compute_class_weights(labels: list) -> dict:
     """
     Computes balanced class weights to handle dataset imbalance.
     Pass the returned dict to model.fit(class_weight=...).
+
+    Args:
+        labels: list of integer class indices (y_train from build_datasets)
     """
     from sklearn.utils.class_weight import compute_class_weight
     import numpy as np

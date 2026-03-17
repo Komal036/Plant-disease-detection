@@ -40,10 +40,13 @@ def build_datasets(
     Returns:
         train_ds, val_ds, test_ds  (tf.data.Dataset)
         class_names                (list of str, sorted)
+        y_train                    (list of int, for class-weight computation)
 
     Key design decisions:
     - Stratified split prevents class imbalance in any fold
+    - EfficientNetV2S preprocess_input applied instead of /255 normalisation
     - Augmentation applied ONLY to training set (no leakage)
+    - val and test sets are cached in memory after first epoch
     - Fixed seed guarantees identical splits across runs
     """
     data_dir = Path(data_dir)
@@ -98,7 +101,10 @@ def build_datasets(
         raw = tf.io.read_file(path)
         img = tf.image.decode_jpeg(raw, channels=3)
         img = tf.image.resize(img, [img_size, img_size])
-        img = tf.cast(img, tf.float32) / 255.0   # normalise to [0, 1]
+        # FIX: EfficientNetV2S was pretrained with preprocess_input,
+        # NOT simple /255 normalisation. Using the correct preprocessing
+        # function is critical for transfer learning accuracy.
+        img = tf.keras.applications.efficientnet_v2.preprocess_input(img)
         return img, label
 
     def augment(img, label):
@@ -107,7 +113,8 @@ def build_datasets(
         img = tf.image.random_brightness(img, max_delta=0.2)
         img = tf.image.random_contrast(img, lower=0.8, upper=1.2)
         img = tf.image.random_saturation(img, lower=0.8, upper=1.2)
-        img = tf.clip_by_value(img, 0.0, 1.0)   # keep values valid after augment
+        # NOTE: do NOT clip to [0,1] here — preprocess_input output range
+        # is [-1, 1] (or model-specific). Clipping would corrupt the values.
         return img, label
 
     def make_ds(paths, labels, augment_flag=False, shuffle=False):
@@ -116,12 +123,19 @@ def build_datasets(
         if augment_flag:
             ds = ds.map(augment, num_parallel_calls=tf.data.AUTOTUNE)
         if shuffle:
-            ds = ds.shuffle(buffer_size=1000, seed=seed)
+            # Reduced buffer (256) balances RAM usage vs randomness
+            ds = ds.shuffle(buffer_size=256, seed=seed)
+        if not augment_flag:
+            # Cache val and test sets after first read — they never change,
+            # so there is no reason to re-read from disk every epoch.
+            ds = ds.cache()
         ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
         return ds
 
-    train_ds = make_ds(X_train, y_train, augment_flag=True, shuffle=True)
-    val_ds   = make_ds(X_val,   y_val)
-    test_ds  = make_ds(X_test,  y_test)
+    train_ds = make_ds(X_train, y_train, augment_flag=True,  shuffle=True)
+    val_ds   = make_ds(X_val,   y_val,   augment_flag=False, shuffle=False)
+    test_ds  = make_ds(X_test,  y_test,  augment_flag=False, shuffle=False)
 
-    return train_ds, val_ds, test_ds, class_names
+    # Return y_train so main.py can compute class weights without
+    # iterating over the entire dataset a second time.
+    return train_ds, val_ds, test_ds, class_names, y_train

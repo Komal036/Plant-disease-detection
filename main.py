@@ -22,7 +22,9 @@ def mode_train(cfg: dict):
     logger.info('──── MODE: TRAIN ────')
 
     # Build datasets
-    train_ds, val_ds, test_ds, class_names = build_datasets(
+    # FIX: build_datasets now returns y_train as the 5th element so we
+    # can compute class weights without iterating the dataset a second time.
+    train_ds, val_ds, test_ds, class_names, y_train = build_datasets(
         data_dir   = cfg['data']['raw_dir'],
         img_size   = cfg['data']['img_size'],
         batch_size = cfg['data']['batch_size'],
@@ -36,6 +38,7 @@ def mode_train(cfg: dict):
         class_names  = class_names,
         img_size     = cfg['data']['img_size'],
         architecture = cfg['model']['architecture'],
+        path         = cfg['paths']['metadata_path'],
     )
 
     # Build model
@@ -47,23 +50,32 @@ def mode_train(cfg: dict):
     )
     model.summary()
 
-    # Compute class weights to handle imbalance
-    import numpy as np
-    all_labels = []
-    for _, labels in train_ds.unbatch():
-        all_labels.append(int(labels.numpy()))
-    class_weight = compute_class_weights(all_labels)
+    # Compute class weights directly from y_train (no second dataset pass)
+    class_weight = compute_class_weights(y_train)
 
     train_cfg = dict(cfg['training'])
     train_cfg['class_weight'] = class_weight
 
+    # Read resume epochs from config (default 0 = start fresh)
+    initial_epoch_head     = train_cfg.pop('initial_epoch_head',     0)
+    initial_epoch_finetune = train_cfg.pop('initial_epoch_finetune', 0)
+
+    # If resuming mid-Phase-2, reload the best checkpoint first
+    if initial_epoch_finetune > 0:
+        import tensorflow as tf
+        checkpoint_path = cfg['paths']['model_save_dir'] + '/best_checkpoint.keras'
+        logger.info(f'Resuming Phase 2 — loading checkpoint: {checkpoint_path}')
+        model = tf.keras.models.load_model(checkpoint_path)
+
     # Train
     h1, h2 = train(
-        model    = model,
-        train_ds = train_ds,
-        val_ds   = val_ds,
-        config   = train_cfg,
-        save_dir = cfg['paths']['model_save_dir'],
+        model                  = model,
+        train_ds               = train_ds,
+        val_ds                 = val_ds,
+        config                 = train_cfg,
+        save_dir               = cfg['paths']['model_save_dir'],
+        initial_epoch_head     = initial_epoch_head,
+        initial_epoch_finetune = initial_epoch_finetune,
     )
 
     # Plot training curves
@@ -83,8 +95,10 @@ def mode_evaluate(cfg: dict):
     logger.info(f'Loading model from: {model_path}')
     model = tf.keras.models.load_model(model_path)
 
-    meta = load_metadata()
-    _, _, test_ds, _ = build_datasets(
+    meta = load_metadata(cfg['paths']['metadata_path'])
+
+    # FIX: build_datasets now returns 5 values
+    _, _, test_ds, _, _ = build_datasets(
         data_dir   = cfg['data']['raw_dir'],
         img_size   = meta['img_size'],
         batch_size = cfg['data']['batch_size'],
@@ -109,13 +123,16 @@ def mode_export(cfg: dict):
     from pathlib import Path
 
     model_path  = cfg['paths']['model_save_dir'] + '/final_model'
-    output_path = cfg['paths']['model_save_dir'] + '/model_fp16.tflite'
+    output_path = cfg['inference']['tflite_model_path']
+
+    logger.info(f'Converting: {model_path} → {output_path}')
 
     converter = tf.lite.TFLiteConverter.from_saved_model(model_path)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.target_spec.supported_types = [tf.float16]
 
     tflite_model = converter.convert()
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_bytes(tflite_model)
 
     size_mb = len(tflite_model) / 1_048_576

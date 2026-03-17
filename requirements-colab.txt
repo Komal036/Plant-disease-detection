@@ -1,0 +1,15 @@
+# requirements-colab.txt  —  Google Colab / Kaggle Notebooks (GPU)
+# Run this cell at the top of your notebook:
+#   !pip install -q -r requirements-colab.txt
+#
+# NOTE: Do NOT install tensorflow here — Colab/Kaggle pre-install the correct
+#       GPU-enabled version. Installing it again breaks the GPU driver binding.
+
+numpy==1.26.4
+scikit-learn==1.4.2
+Pillow==10.3.0
+matplotlib==3.8.4
+seaborn==0.13.2
+pandas==2.2.2
+pyyaml==6.0.1
+python-dotenv==1.0.1
